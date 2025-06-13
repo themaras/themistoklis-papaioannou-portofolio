@@ -27,6 +27,37 @@ def extract_order_number(name: str):
 def starts_with_invalid_separator(name: str):
     return not re.match(r"^\d+_.*", name)
 
+
+def validate_folder(course_name, path, folder_id):
+    """Recursively validate the naming of items inside a folder."""
+    print(f"    📂 Checking folder: {path}")
+    items = list_folder(folder_id)
+
+    # Skip the metadata folder entirely
+    filtered = [item for item in items if item['name'].lower() != 'metadata']
+
+    names = [item['name'] for item in filtered]
+    orders = [extract_order_number(n) for n in names if extract_order_number(n)]
+
+    if orders:
+        if min(orders) != 1:
+            ws.append([course_name, path, '—', 'INVALID', 'File order must start from 1'])
+        for i in range(1, max(orders) + 1):
+            if i not in orders:
+                ws.append([course_name, path, '—', 'INVALID', f'Missing expected file order: {i}'])
+
+    for item in filtered:
+        name = item['name']
+        if starts_with_invalid_separator(name):
+            ws.append([course_name, path, name, 'INVALID', "File name must use '_' as separator"])
+        elif extract_order_number(name):
+            ws.append([course_name, path, name, 'VALID', '✓ File order correct'])
+        else:
+            ws.append([course_name, path, name, 'INVALID', 'File name missing order prefix'])
+
+        if item['mimeType'] == 'application/vnd.google-apps.folder':
+            validate_folder(course_name, f"{path}/{name}", item['id'])
+
 def validate_course(course_name, course_id):
     print(f"\n🎓 Validating Course: {course_name}")
     items = list_folder(course_id)
@@ -58,23 +89,7 @@ def validate_course(course_name, course_id):
         if section.lower() == "metadata":
             continue
         print(f"  📁 Section: {section}")
-        content = list_folder(sec_id)
-        filenames = [f['name'] for f in content]
-        file_orders = [extract_order_number(name) for name in filenames if extract_order_number(name)]
-        if file_orders:
-            if min(file_orders) != 1:
-                ws.append([course_name, section, "—", "INVALID", "File order must start from 1"])
-            for i in range(1, max(file_orders)+1):
-                if i not in file_orders:
-                    ws.append([course_name, section, "—", "INVALID", f"Missing expected file order: {i}"])
-        for f in content:
-            name = f['name']
-            if starts_with_invalid_separator(name):
-                ws.append([course_name, section, name, "INVALID", "File name must use '_' as separator"])
-            elif extract_order_number(name):
-                ws.append([course_name, section, name, "VALID", "✓ File order correct"])
-            else:
-                ws.append([course_name, section, name, "INVALID", "File name missing order prefix"])
+        validate_folder(course_name, section, sec_id)
 
 def check_metadata(course_name, course_id):
     items = list_folder(course_id)
